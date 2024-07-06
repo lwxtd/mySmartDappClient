@@ -4,10 +4,60 @@ import { ethers } from "ethers";
 import { useState, useEffect } from "react";
 import { ContractFactory } from "ethers";
 import Header from "./Components/Header";
-import { verifyTypedData } from "@wagmi/core";
+
 import { Cover } from "./Components/Cover";
+import { LoadingComponenet } from "./Components/LoadingComponenet";
+import { toast } from "react-toastify";
 
 function App() {
+  function checkInput(arr) {
+    if (arr.length > 3) {
+      let percentagesOddIndex = arr.filter((v, index) => {
+        return index % 2;
+      });
+      let addressEvenIndex = arr.filter((v, index) => {
+        return !(index % 2);
+      });
+      let validity = true;
+      addressEvenIndex?.forEach((element, index) => {
+        if (!ethers.isAddress(element)) {
+          validity = false;
+          return;
+        }
+      });
+      if (!validity) {
+        toast.error("Addresses should be valid");
+        return false;
+      }
+
+      let duplicate =
+        new Set(addressEvenIndex).size !== addressEvenIndex.length;
+      if (duplicate) {
+        toast.error("Addresses shouldn't be the duplicate");
+        return false;
+      }
+
+      if (
+        percentagesOddIndex?.reduce(
+          (partialSum, a) => partialSum + parseInt(a),
+          0
+        ) == 100
+      ) {
+      } else {
+        toast.error("The sum of all percentages must be 100");
+        return false;
+      }
+    } else {
+      toast.error("please fill all inputs");
+      return false;
+    }
+    return true;
+  }
+
+  function checkIfDuplicateExists(arr) {
+    return new Set(arr).size !== arr.length;
+  }
+
   let [elmm, setElmm] = useState({ elmentss: [], key: 0 });
 
   const [state, setState] = useState({
@@ -26,6 +76,8 @@ function App() {
     DeployedCode: null,
     deployStep: 0,
     deployArgs: [],
+    deployable: false,
+    deployStatus: 0,
   });
   const [contract, setContract] = useState({
     address: null,
@@ -33,70 +85,19 @@ function App() {
   });
   const [loading, setLoading] = useState({
     loading: false,
+    description: "",
   });
 
   const sendContractDataToServer = (event) => {
     event.preventDefault();
     let x = state.deployArgs.length;
     let d = state.deployArgs;
-    setLoading({ loading: true });
-    let continuee = false;
-    if (x > 3) {
-      console.log("x is", x, d[3], typeof d[3]);
-      switch (x) {
-        case 4:
-          if (
-            parseInt(d[1]) + parseInt(d[3]) == 100 &&
-            ethers.isAddress(d[0]) &&
-            ethers.isAddress(d[2]) &&
-            d[0] !== d[2]
-          ) {
-            continuee = true;
-          }
-          break;
-        case 6:
-          if (
-            parseInt(d[1]) + parseInt(d[3]) + parseInt(d[5]) == 100 &&
-            ethers.isAddress(d[0]) &&
-            ethers.isAddress(d[2]) &&
-            ethers.isAddress(d[4])
-          ) {
-            continuee = true;
-          }
-          break;
-        case 8:
-          if (
-            parseInt(d[1]) + parseInt(d[3]) + parseInt(d[5]) + parseInt(d[7]) ==
-              100 &&
-            ethers.isAddress(d[0]) &&
-            ethers.isAddress(d[2]) &&
-            ethers.isAddress(d[4]) &&
-            ethers.isAddress(d[6])
-          ) {
-            continuee = true;
-          }
-          break;
-        case 10:
-          if (
-            parseInt(d[1]) +
-              parseInt(d[3]) +
-              parseInt(d[5]) +
-              parseInt(d[7]) +
-              parseInt(d[9]) ==
-              100 &&
-            ethers.isAddress(d[0]) &&
-            ethers.isAddress(d[2]) &&
-            ethers.isAddress(d[4]) &&
-            ethers.isAddress(d[6]) &&
-            ethers.isAddress(d[8])
-          ) {
-            continuee = true;
-          }
-          break;
-      }
-    }
-    //check
-    if (continuee) {
+
+    setLoading({
+      loading: true,
+      description: " Compiling Contract",
+    });
+    if (checkInput(d)) {
       try {
         axios
           .post("/api/v1/getContractinit", { cnt: state.deployArgs })
@@ -105,21 +106,31 @@ function App() {
               ...prevState,
               deployStep: 2,
               abi: res.data?.abi, // should define a new state
+              deployable: true,
             }));
-            setLoading({ loading: false });
-            console.log("res", res);
+            setLoading({ loading: false, description: "" });
+            toast.success("Contract has been compiled successfully");
+            toast.success("Now you can deploy it", { autoClose: 7000 });
+          })
+          .catch((err) => {
+            toast.error("Server Error");
+            setLoading({ loading: false, description: "" });
           });
       } catch (error) {
-        setLoading({ loading: false });
-        alert(error);
+        toast.error("OOps! Something is wrong");
+        loading = false;
+        setLoading({ loading: false, description: "" });
       }
     } else {
-      alert(" Check inputs");
+      setLoading({ loading: false, description: "" });
     }
   };
 
   const deploy = async (event) => {
-    setLoading({ loading: true });
+    setLoading({
+      loading: true,
+      description: "Deploying contract to blockchain wait for signing popup",
+    });
     event.preventDefault();
     const factory = ContractFactory.fromSolidity(state.abi, state.signer);
     factory.connect(state.signer);
@@ -132,6 +143,11 @@ function App() {
 
             address: address, // should define a new state
           }));
+          setLoading({ loading: false, description: "" });
+          setState((prevState) => ({
+            ...prevState,
+            deployable: false,
+          }));
         });
 
         response
@@ -142,19 +158,22 @@ function App() {
                 ...prevState,
                 DeployedCode: res,
                 deployStep: 4,
+                deployable: false,
               }));
-              setLoading({ loading: false });
+              toast.success("your contract has been deployed successfully");
+              setLoading({ loading: false, description: "" });
             });
           })
           .catch((err) => {
-            setLoading({ loading: false });
+            setLoading({ loading: false, description: "" });
+            toast.error("OoOps!, something went wrong , please try again");
             console.log("errrr", err);
           });
       })
       .catch((err) => {
         setLoading({ loading: false });
         console.log("err is", err);
-        // setState({ ...state, error: err });
+        toast.error("OoOps!, something went wrong, please try again");
       });
   };
   useEffect(() => {
@@ -277,6 +296,7 @@ function App() {
               } else {
                 e.target.classList.add("bg-error");
                 e.target.classList.remove("bg-success");
+                handleChange(e, 2 * x + 4);
               }
             }}
             type="text"
@@ -284,13 +304,19 @@ function App() {
             className="input input-bordered w-full"
           />
           <input
-            type="text"
+            type="number"
             onChange={(e) => {
-              handleChange(e, 2 * x + 5);
+              if (e.target.value > 99 || e.target.value < 1) {
+                e.target.value = 0;
+              } else {
+                e.target.value = Math.floor(e.target.value);
+                handleChange(e, 2 * x + 5);
+              }
             }}
-            placeholder={"ratio " + (x + 3)}
+            placeholder={"percentage " + (x + 3)}
             className="input input-bordered w-full max-w-xs"
           />
+          <p className="self-center">/100</p>
         </div>
       );
       let k = elmm.key;
@@ -306,11 +332,15 @@ function App() {
         connectreq={state.connectreq}
         sendDataTemplate={setTemplate}
       ></Header>
+      <LoadingComponenet
+        loading={loading.loading}
+        description={loading.description}
+      ></LoadingComponenet>
       <div className="App  flex flex-col p-16 ">
         <Cover />
         <div className="divider"></div>
         <div className="text-primary text-right">
-          Notice : the sum of all ratio must be 100
+          Notice : the sum of all percentages must be 100
         </div>
         <div className="flex flex-row space-x-2 my-2">
           <input
@@ -322,6 +352,7 @@ function App() {
               } else {
                 e.target.classList.add("bg-error");
                 e.target.classList.remove("bg-success");
+                handleChange(e, 0);
               }
             }}
             type="text"
@@ -339,9 +370,10 @@ function App() {
                 handleChange(e, 1);
               }
             }}
-            placeholder="ratio 1 - example : 20 (of 100)"
+            placeholder="percentage 1 - example : 20 (of 100)"
             className="input input-bordered w-full max-w-xs"
           />
+          <p className="self-center">/100</p>
         </div>
         <div className="flex flex-row space-x-2 my-2">
           <input
@@ -353,6 +385,7 @@ function App() {
               } else {
                 e.target.classList.add("bg-error");
                 e.target.classList.remove("bg-success");
+                handleChange(e, 2);
               }
             }}
             type="text"
@@ -369,9 +402,10 @@ function App() {
                 handleChange(e, 3);
               }
             }}
-            placeholder="ratio 1 - example : 80 (of 100)"
+            placeholder="percentage 2 - example : 80 (of 100)"
             className="input input-bordered w-full max-w-xs"
           />
+          <p className="self-center">/100</p>
         </div>
         <div key={elmm.key}>
           {elmm.elmentss.length > 0 ? elmm.elmentss : null}
@@ -417,12 +451,14 @@ function App() {
         <div className="flex flex-row w-full justify-center space-x-8 space-around">
           <div className="flex flex-row space-x-2 justify-center">
             <button
+              key={state.deployStatus}
               onClick={sendContractDataToServer}
               className={
-                "btn  glass " + (state.abi ? "btn-disabled" : "bg-primary")
+                "btn  glass " +
+                (state.deployable ? "btn-disabled" : "bg-primary")
               }
             >
-              send data contract to Server side{" "}
+              1- compile contract
             </button>
           </div>
           {/* {loading.loading ? (
@@ -433,6 +469,7 @@ function App() {
           ) : null} */}
           <div className="flex flex-row space-x-2 justify-center">
             <button
+              key={state.deployStatus}
               onClick={(e) => {
                 setContract((prevContract) => ({
                   ...prevContract,
@@ -441,10 +478,11 @@ function App() {
                 deploy(e);
               }}
               className={
-                "btn  glass " + (state.abi ? "bg-primary" : "btn-disabled")
+                "btn  glass " +
+                (state.deployable ? "bg-primary" : "btn-disabled")
               }
             >
-              {state.abi ? "Click here to Deploy" : "deploy"}
+              {state.abi ? "2- Click here to Deploy" : "2 - deploy"}
             </button>
           </div>
         </div>
@@ -462,7 +500,20 @@ function App() {
               {state.DeployedCode ? " (Deployed) " : "(wait for confirmation)"}
             </div>
             <div class="collapse-content">
-              <p>{contract.address}</p>
+              <div className="flex flex-row w-full">
+                <p>{contract.address}</p>
+                <img
+                  src="/copy.svg"
+                  className="w-8 cursor-pointer pl-4"
+                  onClick={() => {
+                    navigator.clipboard.writeText(contract.address).then(() => {
+                      toast.success("Address has been Copied to clipboard");
+                    });
+                  }}
+                  alt="copy"
+                />
+              </div>
+
               <p>
                 {contract.address ? "Please copy and save the address" : ""}
               </p>
@@ -496,7 +547,7 @@ function App() {
                 "step " + (state.deployStep >= 2 ? "step-primary" : "")
               }
             >
-              baking the contract
+              compiling the contract
             </li>
             <li
               className={
@@ -522,6 +573,9 @@ function App() {
             </li>
           </ul>
         </div>
+        <p className="text-center text-secondary select-none pt-8">
+          Version : 1.1.26
+        </p>
       </div>
     </>
   );

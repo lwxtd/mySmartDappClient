@@ -6,14 +6,20 @@ import reportWebVitals from "./reportWebVitals";
 import { WagmiProvider } from "wagmi";
 import { config } from "./wagamiConfig.ts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+
 const root = ReactDOM.createRoot(document.getElementById("root"));
 const queryClient = new QueryClient();
+const notify = () => toast("Wow so easy!");
 
 root.render(
   <React.StrictMode>
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <App />
+        <ToastContainer />
       </QueryClientProvider>
     </WagmiProvider>
   </React.StrictMode>
